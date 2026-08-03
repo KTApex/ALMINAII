@@ -1,0 +1,59 @@
+name: VpnHide
+options:
+  bundleIdPrefix: com.vpnhide
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+targets:
+  VpnHide:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: VpnHide
+    info:
+      path: VpnHide/Info.plist
+      properties:
+        CFBundleDisplayName: VPN Shield
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "1"
+        UILaunchScreen:
+          UIColorName: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSFaceIDUsageDescription: "VPN Shield uses Face ID to securely unlock your private vault."
+        NSPhotoLibraryUsageDescription: "VPN Shield needs access to your photo library to securely import and encrypt your private photos and videos."
+        NSPhotoLibraryAddUsageDescription: "VPN Shield needs permission to add encrypted media to your private vault."
+        UIApplicationSupportsIndirectInputEvents: true
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.vpnhide.app
+        INFOPLIST_FILE: VpnHide/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGNING_ALLOWED: NO
+        SDKROOT: iphoneos
+        IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_BITCODE: NO
+        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "1.0.0"
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/Frameworks"
+
+schemes:
+  VpnHide:
+    build:
+      targets:
+        VpnHide: all
+    run:
+      config: Debug
+    archive:
+      config: Release

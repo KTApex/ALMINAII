@@ -1,0 +1,97 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:        # Allow manual trigger from GitHub UI
+
+jobs:
+  build-ipa:
+    name: Build & Export IPA
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      # 1. Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Select the Xcode version (latest stable)
+      - name: Select Xcode version
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.2.app 2>/dev/null || \
+          sudo xcode-select -s /Applications/Xcode_15.0.app 2>/dev/null || \
+          echo "Using default Xcode"
+          xcodebuild -version
+
+      # 3. Install XcodeGen (to generate the .xcodeproj from project.yml)
+      - name: Install XcodeGen
+        run: |
+          brew install xcodegen || true
+          xcodegen --version
+
+      # 4. Generate the Xcode project
+      - name: Generate Xcode project
+        run: |
+          xcodegen generate
+          ls -la
+
+      # 5. Build the app for a generic iOS device (Release mode)
+      #    CODE_SIGNING_ALLOWED=NO produces an unsigned .app
+      - name: Build app (Release, unsigned)
+        run: |
+          xcodebuild \
+            -project VpnHide.xcodeproj \
+            -scheme VpnHide \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      # 6. Locate the built .app bundle
+      - name: Locate .app bundle
+        id: find_app
+        run: |
+          APP_PATH=$(find build/Build/Products -name "*.app" -type d | head -1)
+          echo "APP_PATH=$APP_PATH" >> $GITHUB_ENV
+          echo "Found app at: $APP_PATH"
+          ls -la "$APP_PATH"
+
+      # 7. Create the .ipa (Payload/App.app structure)
+      - name: Create .ipa archive
+        run: |
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -r VpnHide.ipa Payload
+          ls -la VpnHide.ipa
+
+      # 8. Upload the .ipa as a GitHub Actions artifact
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VpnHide-unsigned-ipa
+          path: VpnHide.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      # 9. Optional: Also upload the .app for debugging
+      - name: Upload .app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VpnHide-app
+          path: build/Build/Products/Release-iphoneos/*.app
+          if-no-files-found: warn
+          retention-days: 14
+
+      # 10. Print build summary
+      - name: Build summary
+        run: |
+          echo "✅ Build completed successfully!"
+          echo "📦 IPA size: $(du -h VpnHide.ipa | cut -f1)"
+          echo "📱 App bundle: $APP_PATH"
