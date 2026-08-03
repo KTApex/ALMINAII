@@ -42,7 +42,7 @@ struct PasscodeView: View {
 
                 // PIN dots
                 pinDotsView
-                    .modifier(ShakeEffect(animatableData: shakeTrigger ? 1 : 0))
+                    .modifier(ShakeEffect(animatable: shakeTrigger ? 1 : 0))
                     .padding(.vertical, 20)
 
                 // Error message
@@ -56,7 +56,7 @@ struct PasscodeView: View {
                 // Biometric button
                 if session.passcodeMode == .unlock && session.isBiometricEnabled {
                     Button {
-                        authenticateWithBiometrics()
+                        showWithBiometrics()
                     } label: {
                         HStack {
                             Image(systemName: biometricIcon)

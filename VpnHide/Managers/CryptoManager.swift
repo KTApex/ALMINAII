@@ -109,9 +109,7 @@ final class CryptoManager {
 
     func decrypt(_ data: Data, with key: SymmetricKey) throws -> Data {
         do {
-            guard let sealedBox = try AES.GCM.SealedBox(combined: data) else {
-                throw CryptoError.invalidData
-            }
+            let sealedBox = try AES.GCM.SealedBox(combined: data)
             return try AES.GCM.open(sealedBox, using: key)
         } catch let error as CryptoError {
             throw error

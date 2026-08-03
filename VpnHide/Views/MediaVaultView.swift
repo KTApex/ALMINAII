@@ -75,7 +75,7 @@ struct MediaVaultView: View {
                 maxSelectionCount: 20,
                 matching: .any(of: [.images, .videos])
             )
-            .onChange(of: pickerItems) { _, newItems in
+            .onChange(of: pickerItems) { newItems in
                 importPickedItems(newItems)
             }
             .fullScreenCover(isPresented: $showSlideshow) {
