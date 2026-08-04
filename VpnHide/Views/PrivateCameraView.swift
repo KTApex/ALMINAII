@@ -119,12 +119,12 @@ struct PrivateCameraView: View {
             }
 
             // Error overlay
-            if let isCameraError = isCameraError {
+            if let cameraError {
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 40))
                         .foregroundColor(.gray)
-                    Text(isCameraError)
+                    Text(cameraError)
                         .font(.subheadline)
                         .foregroundColor(.gray)
                     Button("Close") {
@@ -156,7 +156,7 @@ struct PrivateCameraView: View {
                         HStack {
                             Button {
                                 isShowingPreview = false
-                                capturedPreview = nil
+                                self.capturedPreview = nil
                             } label: {
                                 Image(systemName: "xmark")
                                     .font(.system(size: 17, weight: .semibold))
@@ -172,7 +172,7 @@ struct PrivateCameraView: View {
                         HStack(spacing: 20) {
                             Button {
                                 isShowingPreview = false
-                                capturedPreview = nil
+                                self.capturedPreview = nil
                             } label: {
                                 Text("Retake")
                                     .font(.headline)
@@ -200,7 +200,7 @@ struct PrivateCameraView: View {
                 // Preview captured video
                 VideoPreviewView(url: capturedVideoURL) {
                     isShowingPreview = false
-                    capturedVideoURL = nil
+                    self.capturedVideoURL = nil
                 } onSave: {
                     saveCapturedVideo()
                 }
@@ -231,7 +231,7 @@ struct PrivateCameraView: View {
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
               let input = try? AVCaptureDeviceInput(device: device),
               session.canAddInput(input) else {
-            isCameraError = "Camera unavailable"
+            cameraError = "Camera unavailable"
             session.commitConfiguration()
             return
         }
@@ -250,8 +250,7 @@ struct PrivateCameraView: View {
         session.commitConfiguration()
 
         // Start session on background queue
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
             self.session.startRunning()
             DispatchQueue.main.async {
                 self.isCameraReady = self.session.isRunning
@@ -272,11 +271,13 @@ struct PrivateCameraView: View {
             // Capture photo
             let settings = AVCapturePhotoSettings()
             settings.flashMode = flashMode
-            photoOutput.capturePhoto(with: settings, delegate: PhotoCaptureDelegate { [weak self] image in
-                guard let self, let image else { return }
+            let delegate = PhotoCaptureDelegate()
+            delegate.handler = { image in
+                guard let image else { return }
                 self.capturedPreview = image
                 self.isShowingPreview = true
-            })
+            }
+            photoOutput.capturePhoto(with: settings, delegate: delegate)
         }
     }
 
@@ -334,7 +335,7 @@ struct PrivateCameraView: View {
         }
 
         isShowingPreview = false
-        capturedPreview = nil
+        self.capturedPreview = nil
         dismiss()
     }
 
@@ -349,7 +350,7 @@ struct PrivateCameraView: View {
         }
 
         isShowingPreview = false
-        capturedVideoURL = nil
+        self.capturedVideoURL = nil
         dismiss()
     }
 }

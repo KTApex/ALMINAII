@@ -38,8 +38,8 @@ enum VPNConnectionState {
 struct PingEntry: Identifiable {
     let id = UUID()
     let server: String
-    let latency: String
-    let status: Bool
+    var latency: String
+    var status: Bool
 }
 
 struct NetworkSnapshot {
@@ -98,7 +98,7 @@ enum NetworkHelper {
 
 /// Posts routine "network utility" local notifications so that any system alert
 /// never reveals vault activity. Falls back to an in-app stealth banner.
-final class FakeNotificationManager {
+final class FakeNotificationManager: ObservableObject {
     static let shared = FakeNotificationManager()
 
     private let center = UNUserNotificationCenter.current()

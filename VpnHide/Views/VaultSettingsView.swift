@@ -224,16 +224,16 @@ struct VaultSettingsView: View {
         isBackingUp = true
         masterPIN = ""
 
-        backup.backupNow(masterPIN: pin) { [weak self] result in
+        backup.backupNow(masterPIN: pin) { result in
             DispatchQueue.main.async {
-                self?.isBackingUp = false
+                isBackingUp = false
                 switch result {
                 case .success:
-                    self?.lastOperationMessage = "Backup completed successfully."
+                    lastOperationMessage = "Backup completed successfully."
                 case .failure(let error):
-                    self?.lastOperationMessage = "Backup failed: \(error.localizedDescription)"
+                    lastOperationMessage = "Backup failed: \(error.localizedDescription)"
                 }
-                self?.showConfirmation = true
+                showConfirmation = true
             }
         }
     }

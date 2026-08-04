@@ -158,11 +158,11 @@ private struct TrashRowView: View {
 
                 // Expiration badge
                 if let deletedAt = item.deletedAt {
-                    let daysLeft = max(0, 30 - Calendar.current.dateComponents(
+                    let daysLeft = max(0, 30 - (Calendar.current.dateComponents(
                         [.day],
                         from: deletedAt,
                         to: Date()
-                    ).day ?? 0)
+                    ).day ?? 0))
 
                     Text("\(daysLeft) days remaining")
                         .font(.caption2)
