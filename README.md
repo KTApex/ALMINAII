@@ -84,6 +84,7 @@ VpnHide/
 │   │   ├── KeychainManager.swift       # Keychain PIN/key storage
 │   │   ├── SecurityManager.swift       # Intruder selfie + face-down/shake lock + storage disguise
 │   │   ├── CloudBackupManager.swift    # AES-256 cloud backup (manual + auto sync)
+│   │   ├── GoogleDriveAuthManager.swift # Native OAuth 2.0 sign-in for Google Drive
 │   │   ├── VaultSessionManager.swift   # PIN, FaceID, panic mode state
 │   │   └── VaultStorageManager.swift   # Encrypted file storage + trash + temp cache
 │   ├── Views/
@@ -132,6 +133,54 @@ open VpnHide.xcodeproj
 
 - Select your simulator/device
 - Press **⌘R** to run
+
+---
+
+## ☁️ Google Drive Backup Setup
+
+The app uses **native OAuth 2.0** (`ASWebAuthenticationSession`) — no external SDK required. To enable Google Drive backups, you must create an OAuth client and paste your Client ID into the app:
+
+### 1. Create a Google Cloud Project
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project (or select an existing one)
+3. Go to **APIs & Services → Library**
+4. Search for **Google Drive API** and click **Enable**
+
+### 2. Create OAuth Client ID
+
+1. Go to **APIs & Services → Credentials**
+2. Click **+ Create Credentials → OAuth client ID**
+3. Application type: **iOS**
+4. Bundle ID: `com.vpnhide.app`
+5. Click **Create**, then copy the **Client ID** (format: `xxxxx.apps.googleusercontent.com`)
+
+### 3. Add the Client ID to the app
+
+Open `VpnHide/Managers/GoogleDriveAuthManager.swift` and replace the placeholder:
+
+```swift
+private let clientID = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+```
+
+with your real Client ID.
+
+### 4. Sign In & Back Up
+
+1. Open the vault → **Settings**
+2. Set the **Cloud Provider** to **Google Drive**
+3. Tap **Sign in to Google Drive** → complete the OAuth flow in the browser
+4. Tap **Back Up Now** and enter your Master PIN
+
+### How It Works
+
+| Step | Detail |
+|------|--------|
+| 🔐 **Encryption** | Vault media is encrypted with AES-256-GCM using your Master PIN |
+| 📦 **Container** | All encrypted data is packed into a single `vault_backup.vpn` file |
+| ☁️ **Upload** | The container is uploaded to your personal Drive via the Drive API |
+| 🔑 **Token** | OAuth access token is stored securely in the iOS Keychain |
+| 🔒 **Privacy** | Google only sees opaque ciphertext — it **cannot** read your data |
 
 ---
 

@@ -314,11 +314,9 @@ final class CloudBackupManager: ObservableObject {
 
     // MARK: - Google Drive
 
-    /// OAuth access token for Google Drive API (set after Google Sign-In).
-    private var googleAccessToken: String?
-
-    func setGoogleAccessToken(_ token: String) {
-        googleAccessToken = token
+    /// OAuth access token for Google Drive API (from GoogleDriveAuthManager).
+    private var googleAccessToken: String? {
+        GoogleDriveAuthManager.shared.accessToken
     }
 
     private func uploadToGoogleDrive(_ data: Data) throws {

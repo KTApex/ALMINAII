@@ -30,6 +30,10 @@ targets:
         NSMotionUsageDescription: "VPN Shield uses motion sensors to optimize network performance."
         UIApplicationSupportsIndirectInputEvents: true
         ITSAppUsesNonExemptEncryption: false
+        CFBundleURLTypes:
+          - CFBundleURLName: com.vpnhide.oauth
+            CFBundleURLSchemes:
+              - com.vpnhide.app
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.vpnhide.app

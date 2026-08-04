@@ -11,6 +11,7 @@ struct VaultSettingsView: View {
 
     @ObservedObject var security = SecurityManager.shared
     @ObservedObject var backup = CloudBackupManager.shared
+    @ObservedObject var googleAuth = GoogleDriveAuthManager.shared
 
     @State private var isShowingPanicSetup = false
     @State private var isShowingSecurityLog = false
@@ -19,6 +20,8 @@ struct VaultSettingsView: View {
     @State private var isBackingUp = false
     @State private var lastOperationMessage: String?
     @State private var showConfirmation = false
+    @State private var showGoogleSignInError = false
+    @State private var googleSignInErrorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -99,6 +102,40 @@ struct VaultSettingsView: View {
                     )) {
                         ForEach(CloudBackupProvider.allCases) { provider in
                             Text(provider.rawValue).tag(provider)
+                        }
+                    }
+
+                    // Google Drive sign-in status
+                    if backup.selectedProvider == .googleDrive {
+                        if googleAuth.isSignedIn {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("Signed in to Google Drive")
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                Button("Sign Out") {
+                                    googleAuth.signOut()
+                                }
+                                .font(.subheadline)
+                                .foregroundColor(.red)
+                            }
+                        } else {
+                            Button {
+                                performGoogleSignIn()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "person.crop.circle.badge.checkmark")
+                                        .foregroundColor(.blue)
+                                    Text(googleAuth.isAuthenticating ? "Signing In..." : "Sign in to Google Drive")
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    if googleAuth.isAuthenticating {
+                                        ProgressView()
+                                    }
+                                }
+                            }
+                            .disabled(googleAuth.isAuthenticating)
                         }
                     }
 
@@ -195,6 +232,14 @@ struct VaultSettingsView: View {
                     showConfirmation = false
                 }
             }
+            .alert(
+                googleSignInErrorMessage ?? "Google Sign-In Failed",
+                isPresented: $showGoogleSignInError
+            ) {
+                Button("OK") {
+                    showGoogleSignInError = false
+                }
+            }
         }
     }
 
@@ -213,6 +258,23 @@ struct VaultSettingsView: View {
         case .faceID: return "Face ID"
         case .touchID: return "Touch ID"
         default: return "Biometrics"
+        }
+    }
+
+    // MARK: - Google Sign-In
+
+    private func performGoogleSignIn() {
+        googleAuth.signIn { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    lastOperationMessage = "Signed in to Google Drive successfully."
+                    showConfirmation = true
+                case .failure(let error):
+                    googleSignInErrorMessage = error.localizedDescription
+                    showGoogleSignInError = true
+                }
+            }
         }
     }
 
