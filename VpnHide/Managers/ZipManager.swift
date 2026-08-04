@@ -60,11 +60,14 @@ final class ZipManager: ObservableObject {
 
     /// Whether photos should be auto-saved to the Photos library after unzipping.
     @Published var autoSavePhotosToLibrary: Bool {
-        get { UserDefaults.standard.bool(forKey: autoSavePhotosKey) }
-        set { UserDefaults.standard.set(newValue, forKey: autoSavePhotosKey) }
+        didSet {
+            UserDefaults.standard.set(autoSavePhotosToLibrary, forKey: autoSavePhotosKey)
+        }
     }
 
-    private init() {}
+    private init() {
+        autoSavePhotosToLibrary = UserDefaults.standard.bool(forKey: autoSavePhotosKey)
+    }
 
     // MARK: - Export: Create Password-Protected ZIP
 
@@ -338,7 +341,7 @@ final class ZipManager: ObservableObject {
         var result = Data()
         result.append("VPNZIP".data(using: .utf8)!)
         result.appendUInt16(1) // Version
-        result.append(sealedBox.nonce)
+        result.append(Data(sealedBox.nonce))
         result.append(sealedBox.ciphertext)
         result.append(sealedBox.tag)
         return result
@@ -392,12 +395,12 @@ final class ZipManager: ObservableObject {
 extension Data {
     mutating func appendUInt16(_ value: UInt16) {
         var littleEndian = value.littleEndian
-        withUnsafeBytes(of: &littleEndian) { append(contentsOf: $0) }
+        Swift.withUnsafeBytes(of: &littleEndian) { append(contentsOf: $0) }
     }
 
     mutating func appendUInt32(_ value: UInt32) {
         var littleEndian = value.littleEndian
-        withUnsafeBytes(of: &littleEndian) { append(contentsOf: $0) }
+        Swift.withUnsafeBytes(of: &littleEndian) { append(contentsOf: $0) }
     }
 
     func readUInt16(at offset: Int) -> UInt16 {

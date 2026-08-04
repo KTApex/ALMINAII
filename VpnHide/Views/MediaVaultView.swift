@@ -138,100 +138,16 @@ struct MediaVaultView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                // Background
-                Color(red: 0.05, green: 0.07, blue: 0.12)
-                    .ignoresSafeArea()
+            finalModifiers
+        }
+        .preferredColorScheme(.dark)
+    }
 
-                if displayedItems.isEmpty {
-                    emptyStateView
-                } else {
-                    groupedGridView
-                }
-            }
-            .navigationTitle("Private Vault")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        session.lockVault()
-                    } label: {
-                        Image(systemName: "lock.fill")
-                            .foregroundColor(.gray)
-                    }
-                }
+    // MARK: - Content Builders
 
-                // Toolbar
-                ToolbarItem(placement: .topBarTrailing) {
-                    if isMultiSelectMode {
-                        Button("Cancel") {
-                            exitMultiSelectMode()
-                        }
-                        .foregroundColor(.blue)
-                    } else {
-                        HStack(spacing: 14) {
-                            // Album selector
-                            Button {
-                                showAlbumMenu = true
-                            } label: {
-                                Image(systemName: "folder.fill")
-                                    .foregroundColor(selectedAlbumID != nil ? .blue : .gray)
-                            }
-
-                            // Filter/Sort menu
-                            Button {
-                                showFilterMenu = true
-                            } label: {
-                                Image(systemName: filterOption != .all ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                                    .foregroundColor(filterOption != .all ? .blue : .gray)
-                            }
-
-                            // Import ZIP
-                            Button {
-                                showZipImport = true
-                            } label: {
-                                Image(systemName: "archivebox")
-                                    .foregroundColor(.purple)
-                            }
-
-                            // Add
-                            Button {
-                                showPhotoPicker = true
-                            } label: {
-                                Image(systemName: "plus")
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                    }
-                }
-
-                // Bottom toolbar: Camera, Trash, Settings
-                ToolbarItemGroup(placement: .bottomBar) {
-                    if !isMultiSelectMode {
-                        Button {
-                            showPrivateCamera = true
-                        } label: {
-                            Label("Camera", systemImage: "camera.fill")
-                        }
-
-                        Spacer()
-
-                        Button {
-                            showTrash = true
-                        } label: {
-                            Label("Trash", systemImage: "trash.fill")
-                        }
-
-                        Spacer()
-
-                        Button {
-                            showSettings = true
-                        } label: {
-                            Label("Settings", systemImage: "gearshape.fill")
-                        }
-                    }
-                }
-            }
+    /// The base vault grid with background, toolbar, and media pickers.
+    private var vaultContent: some View {
+        vaultGrid
             .safeAreaInset(edge: .bottom) {
                 if isMultiSelectMode {
                     multiSelectActionBar
@@ -265,6 +181,109 @@ struct MediaVaultView: View {
                     shareURLs = []
                 }
             }
+    }
+
+    /// The base grid with background and toolbar.
+    private var vaultGrid: some View {
+        ZStack {
+            // Background
+            Color(red: 0.05, green: 0.07, blue: 0.12)
+                .ignoresSafeArea()
+
+            if displayedItems.isEmpty {
+                emptyStateView
+            } else {
+                groupedGridView
+            }
+        }
+        .navigationTitle("Private Vault")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    session.lockVault()
+                } label: {
+                    Image(systemName: "lock.fill")
+                        .foregroundColor(.gray)
+                }
+            }
+
+            // Toolbar
+            ToolbarItem(placement: .topBarTrailing) {
+                if isMultiSelectMode {
+                    Button("Cancel") {
+                        exitMultiSelectMode()
+                    }
+                    .foregroundColor(.blue)
+                } else {
+                    HStack(spacing: 14) {
+                        // Album selector
+                        Button {
+                            showAlbumMenu = true
+                        } label: {
+                            Image(systemName: "folder.fill")
+                                .foregroundColor(selectedAlbumID != nil ? .blue : .gray)
+                        }
+
+                        // Filter/Sort menu
+                        Button {
+                            showFilterMenu = true
+                        } label: {
+                            Image(systemName: filterOption != .all ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                                .foregroundColor(filterOption != .all ? .blue : .gray)
+                        }
+
+                        // Import ZIP
+                        Button {
+                            showZipImport = true
+                        } label: {
+                            Image(systemName: "archivebox")
+                                .foregroundColor(.purple)
+                        }
+
+                        // Add
+                        Button {
+                            showPhotoPicker = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+            }
+
+            // Bottom toolbar: Camera, Trash, Settings
+            ToolbarItemGroup(placement: .bottomBar) {
+                if !isMultiSelectMode {
+                    Button {
+                        showPrivateCamera = true
+                    } label: {
+                        Label("Camera", systemImage: "camera.fill")
+                    }
+
+                    Spacer()
+
+                    Button {
+                        showTrash = true
+                    } label: {
+                        Label("Trash", systemImage: "trash.fill")
+                    }
+
+                    Spacer()
+
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Label("Settings", systemImage: "gearshape.fill")
+                    }
+                }
+            }
+        }
+    }
+
+    /// ZIP import/export sheets, password prompt, and file importer.
+    private var zipImportModifiers: some View {
+        vaultContent
             .sheet(isPresented: $showZipExport) {
                 ZipExportView(
                     items: selectedItemsForExport,
@@ -326,6 +345,11 @@ struct MediaVaultView: View {
             } message: {
                 Text(zipSuccessMessage ?? "")
             }
+    }
+
+    /// Remaining sheets, alerts, and the single media viewer.
+    private var finalModifiers: some View {
+        zipImportModifiers
             .alert("Share Error", isPresented: $showShareError) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -407,8 +431,6 @@ struct MediaVaultView: View {
             } message: {
                 Text(importError ?? "")
             }
-        }
-        .preferredColorScheme(.dark)
     }
 
     // MARK: - Grouped Grid
