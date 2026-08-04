@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreMotion
 import Foundation
+import SwiftUI
 import UIKit
 
 // MARK: - Intruder Log Entry

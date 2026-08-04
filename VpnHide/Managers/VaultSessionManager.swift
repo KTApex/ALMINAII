@@ -73,6 +73,20 @@ final class VaultSessionManager: ObservableObject {
         return candidate == storedHash
     }
 
+    // MARK: - Security Monitoring (Emergency Lock)
+
+    /// Starts emergency face-down / shake monitoring.
+    /// Forwards to `SecurityManager.startEmergencyMonitoring()`.
+    func startSecurityMonitoring() {
+        SecurityManager.shared.startEmergencyMonitoring()
+    }
+
+    /// Stops emergency face-down / shake monitoring.
+    /// Forwards to `SecurityManager.stopEmergencyMonitoring()`.
+    func stopSecurityMonitoring() {
+        SecurityManager.shared.stopEmergencyMonitoring()
+    }
+
     // MARK: - Biometric
 
     private func loadBiometricPreference() {

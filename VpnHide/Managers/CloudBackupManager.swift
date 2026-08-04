@@ -194,9 +194,7 @@ final class CloudBackupManager: ObservableObject {
 
         // Combine: nonce + ciphertext + tag
         var container = Data()
-        container.append(sealedBox.nonce.data)
-        container.append(sealedBox.ciphertext)
-        container.append(sealedBox.tag)
+        container.append(sealedBox.combined)
 
         return container
     }
@@ -204,21 +202,12 @@ final class CloudBackupManager: ObservableObject {
     // MARK: - Restore From Container
 
     private func restoreFromContainer(_ container: Data, masterPIN: String) throws {
-        // Parse container: nonce (12) + ciphertext + tag (16)
+        // Parse the combined sealed box (nonce + ciphertext + tag)
         guard container.count > 28 else {
             throw BackupError.invalidContainer
         }
 
-        let nonceData = container.prefix(12)
-        let tagData = container.suffix(16)
-        let ciphertext = container.dropFirst(12).dropLast(16)
-
-        let nonce = try AES.GCM.Nonce(data: nonceData)
-        let sealedBox = try AES.GCM.SealedBox(
-            nonce: nonce,
-            ciphertext: ciphertext,
-            tag: tagData
-        )
+        let sealedBox = try AES.GCM.SealedBox(combined: container)
 
         let key = try deriveKey(from: masterPIN)
         let manifestData = try AES.GCM.open(sealedBox, using: key)
@@ -420,7 +409,8 @@ final class CloudBackupManager: ObservableObject {
         guard isWiFi, isCharging else { return }
 
         // Auto-backup with the stored master PIN (retrieved from Keychain)
-        guard let masterPIN = KeychainManager.shared.readKey(named: "com.vpnhide.vault.masterpin") else {
+        guard let masterPINData = KeychainManager.shared.readKey(named: "com.vpnhide.vault.masterpin"),
+              let masterPIN = String(data: masterPINData, encoding: .utf8) else {
             return
         }
 
