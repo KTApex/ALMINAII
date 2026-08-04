@@ -15,6 +15,7 @@ final class VaultStorageManager: ObservableObject {
 
     @Published var vaultItems: [VaultItem] = []
     @Published var decoyItems: [VaultItem] = []
+    @Published var albums: [VaultAlbum] = []
 
     // MARK: - Private
 
@@ -22,9 +23,11 @@ final class VaultStorageManager: ObservableObject {
     private let fileManager = FileManager.default
     private let metadataFileName = "vault_metadata.json"
     private let decoyMetadataFileName = "decoy_metadata.json"
+    private let albumsFileName = "vault_albums.json"
 
     private init() {
         loadMetadata()
+        loadAlbums()
     }
 
     // MARK: - Directory Paths
@@ -67,9 +70,68 @@ final class VaultStorageManager: ObservableObject {
         vaultAppSupportDir.appendingPathComponent(decoyMetadataFileName)
     }
 
+    private var albumsFileURL: URL {
+        vaultAppSupportDir.appendingPathComponent(albumsFileName)
+    }
+
     private func loadMetadata() {
         vaultItems = loadItems(from: metadataFileURL)
         decoyItems = loadItems(from: decoyMetadataFileURL)
+    }
+
+    // MARK: - Album Management
+
+    private func loadAlbums() {
+        guard let data = try? Data(contentsOf: albumsFileURL) else {
+            // Seed default albums on first launch
+            albums = [
+                VaultAlbum(name: "Personal", icon: "person.fill"),
+                VaultAlbum(name: "Documents", icon: "doc.fill"),
+                VaultAlbum(name: "Favorites", icon: "star.fill")
+            ]
+            saveAlbums()
+            return
+        }
+        let decoder = JSONDecoder()
+        albums = (try? decoder.decode([VaultAlbum].self, from: data)) ?? []
+    }
+
+    private func saveAlbums() {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        guard let data = try? encoder.encode(albums) else { return }
+        try? data.write(to: albumsFileURL, options: .atomic)
+    }
+
+    func createAlbum(name: String, icon: String = "folder.fill") {
+        let album = VaultAlbum(name: name, icon: icon)
+        albums.append(album)
+        saveAlbums()
+    }
+
+    func deleteAlbum(_ album: VaultAlbum) {
+        albums.removeAll { $0.id == album.id }
+        // Remove album reference from items
+        for index in vaultItems.indices where vaultItems[index].albumID == album.id {
+            vaultItems[index].albumID = nil
+        }
+        saveAlbums()
+        saveMetadata()
+    }
+
+    func renameAlbum(_ album: VaultAlbum, to newName: String) {
+        guard let index = albums.firstIndex(where: { $0.id == album.id }) else { return }
+        albums[index].name = newName
+        saveAlbums()
+    }
+
+    func moveItems(_ items: [VaultItem], to album: VaultAlbum?) {
+        for item in items {
+            if let index = vaultItems.firstIndex(where: { $0.id == item.id }) {
+                vaultItems[index].albumID = album?.id
+            }
+        }
+        saveMetadata()
     }
 
     private func loadItems(from url: URL) -> [VaultItem] {

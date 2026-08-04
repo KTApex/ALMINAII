@@ -7,6 +7,26 @@ enum VaultMediaType: String, Codable {
     case video
 }
 
+/// A user-created album/category for organizing vault media.
+struct VaultAlbum: Identifiable, Codable, Hashable {
+    let id: UUID
+    var name: String
+    var icon: String
+    var createdAt: Date
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        icon: String = "folder.fill",
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.icon = icon
+        self.createdAt = createdAt
+    }
+}
+
 struct VaultItem: Identifiable, Codable, Hashable {
     let id: UUID
     var fileName: String
@@ -16,6 +36,7 @@ struct VaultItem: Identifiable, Codable, Hashable {
     var fileSize: Int64
     var duration: Double
     var isDecoy: Bool = false
+    var albumID: UUID?
 
     init(
         id: UUID = UUID(),
@@ -25,7 +46,8 @@ struct VaultItem: Identifiable, Codable, Hashable {
         createdAt: Date = Date(),
         fileSize: Int64,
         duration: Double = 0,
-        isDecoy: Bool = false
+        isDecoy: Bool = false,
+        albumID: UUID? = nil
     ) {
         self.id = id
         self.fileName = fileName
@@ -35,6 +57,7 @@ struct VaultItem: Identifiable, Codable, Hashable {
         self.fileSize = fileSize
         self.duration = duration
         self.isDecoy = isDecoy
+        self.albumID = albumID
     }
 
     var displayName: String {
@@ -47,5 +70,68 @@ struct VaultItem: Identifiable, Codable, Hashable {
 
     var utType: UTType {
         mediaType == .photo ? .image : .movie
+    }
+}
+
+// MARK: - Sort & Filter Options
+
+enum VaultSortOption: String, CaseIterable, Identifiable {
+    case dateAdded = "Date Added"
+    case fileSize = "File Size"
+    case name = "Name"
+
+    var id: String { rawValue }
+}
+
+enum VaultFilterOption: String, CaseIterable, Identifiable {
+    case all = "All"
+    case photosOnly = "Photos Only"
+    case videosOnly = "Videos Only"
+
+    var id: String { rawValue }
+}
+
+// MARK: - Date Grouping
+
+/// Groups items into chronological sections with friendly headers.
+enum DateGroup: Hashable {
+    case today
+    case yesterday
+    case month(Date)
+    case year(Int)
+
+    var title: String {
+        switch self {
+        case .today:
+            return "Today"
+        case .yesterday:
+            return "Yesterday"
+        case .month(let date):
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMMM yyyy"
+            return formatter.string(from: date)
+        case .year(let year):
+            return "\(year)"
+        }
+    }
+
+    static func group(for date: Date) -> DateGroup {
+        let calendar = Calendar.current
+
+        if calendar.isDateInToday(date) {
+            return .today
+        }
+        if calendar.isDateInYesterday(date) {
+            return .yesterday
+        }
+
+        // Check if within the current year
+        let currentYear = calendar.component(.year, from: Date())
+        let itemYear = calendar.component(.year, from: date)
+
+        if itemYear == currentYear {
+            return .month(date)
+        }
+        return .year(itemYear)
     }
 }
