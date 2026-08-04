@@ -1,5 +1,6 @@
 import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The main vault interface showing a clean, date-grouped grid of encrypted media.
 /// Features:
@@ -35,6 +36,22 @@ struct MediaVaultView: View {
     @State private var autoDeleteOriginals = false
     @State private var showShareError = false
     @State private var shareErrorMessage = ""
+
+    // ZIP Export / Import
+    @State private var showZipExport = false
+    @State private var showZipImport = false
+    @State private var zipExportURL: URL?
+    @State private var zipImportURL: URL?
+    @State private var zipErrorMessage: String?
+    @State private var zipSuccessMessage: String?
+    @State private var isZipImporting = false
+    @State private var showZipPasswordSheet = false
+    @State private var zipPassword = ""
+    @State private var zipMode: ZipMode = .export
+    @State private var showZipSuccessAlert = false
+    @State private var importedItemCount = 0
+    @State private var isImportingFromFilesApp = false
+    @State private var importFileImporter = false
 
     // Filter / Sort / Album state
     @State private var sortOption: VaultSortOption = .dateAdded
@@ -169,6 +186,14 @@ struct MediaVaultView: View {
                                     .foregroundColor(filterOption != .all ? .blue : .gray)
                             }
 
+                            // Import ZIP
+                            Button {
+                                showZipImport = true
+                            } label: {
+                                Image(systemName: "archivebox")
+                                    .foregroundColor(.purple)
+                            }
+
                             // Add
                             Button {
                                 showPhotoPicker = true
@@ -239,6 +264,67 @@ struct MediaVaultView: View {
                     showShareSheet = false
                     shareURLs = []
                 }
+            }
+            .sheet(isPresented: $showZipExport) {
+                ZipExportView(
+                    items: selectedItemsForExport,
+                    storage: storage,
+                    onExported: { url in
+                        zipExportURL = url
+                        showZipExport = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            shareURLs = [url]
+                            showShareSheet = true
+                            exitMultiSelectMode()
+                        }
+                    }
+                )
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $showZipImport) {
+                ZipImportView(storage: storage)
+                    .presentationDetents([.medium])
+                    .presentationDragIndicator(.visible)
+            }
+            .alert("Enter ZIP Password", isPresented: $showZipPasswordSheet) {
+                SecureField("Password", text: $zipPassword)
+                    .keyboardType(.default)
+                Button("Import") {
+                    performZipImport()
+                }
+                Button("Cancel", role: .cancel) {
+                    zipPassword = ""
+                    zipImportURL = nil
+                }
+            } message: {
+                Text("Enter the password for this ZIP archive.")
+            }
+            .fileImporter(
+                isPresented: $importFileImporter,
+                allowedContentTypes: [.data, .zip, .item],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    guard let url = urls.first else { return }
+                    importZipFile(at: url)
+                case .failure:
+                    zipErrorMessage = "Could not open the selected file."
+                }
+            }
+            .alert("ZIP Error", isPresented: Binding(
+                get: { zipErrorMessage != nil },
+                set: { if !$0 { zipErrorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(zipErrorMessage ?? "")
+            }
+            .alert("ZIP Import Complete", isPresented: $showZipSuccessAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(zipSuccessMessage ?? "")
             }
             .alert("Share Error", isPresented: $showShareError) {
                 Button("OK", role: .cancel) {}
@@ -466,6 +552,18 @@ struct MediaVaultView: View {
             }
             .disabled(selectedItems.isEmpty)
 
+            // ZIP Export button
+            Button {
+                showZipExport = true
+            } label: {
+                Image(systemName: "archivebox.fill")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(Color.purple))
+            }
+            .disabled(selectedItems.isEmpty)
+
             // Move to album
             Button {
                 showMoveToAlbum = true
@@ -612,6 +710,327 @@ struct MediaVaultView: View {
         let itemsToDelete = storage.vaultItems.filter { selectedItems.contains($0.id) }
         storage.moveToTrash(itemsToDelete)
         exitMultiSelectMode()
+    }
+
+    // MARK: - ZIP Export / Import
+
+    /// Items selected for ZIP export.
+    private var selectedItemsForExport: [VaultItem] {
+        storage.vaultItems.filter { selectedItems.contains($0.id) }
+    }
+
+    /// Imports a ZIP file from the Files app.
+    private func importZipFile(at url: URL) {
+        // Show password prompt
+        zipImportURL = url
+        zipMode = .import
+        zipPassword = ""
+        showZipPasswordSheet = true
+    }
+
+    /// Performs the actual ZIP import with the entered password.
+    private func performZipImport() {
+        guard let url = zipImportURL, !zipPassword.isEmpty else { return }
+        let password = zipPassword
+        let storageRef = storage
+
+        isZipImporting = true
+        zipPassword = ""
+        zipImportURL = nil
+
+        Task {
+            do {
+                let count = try await ZipManager.shared.importFromZip(
+                    url: url,
+                    password: password,
+                    storage: storageRef
+                )
+                await MainActor.run {
+                    isZipImporting = false
+                    zipSuccessMessage = "Successfully imported \(count) item\(count == 1 ? "" : "s")."
+                    showZipSuccessAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isZipImporting = false
+                    zipErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+}
+
+// MARK: - ZIP Mode
+
+enum ZipMode {
+    case export
+    case `import`
+}
+
+// MARK: - ZIP Export View
+
+/// Sheet for creating a password-protected ZIP archive from selected items.
+struct ZipExportView: View {
+    let items: [VaultItem]
+    let storage: VaultStorageManager
+    var onExported: (URL) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var password = ""
+    @State private var confirmPassword = ""
+    @State private var isExporting = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                // Header
+                VStack(spacing: 8) {
+                    Image(systemName: "archivebox.fill")
+                        .font(.system(size: 48))
+                        .foregroundColor(.purple)
+                    Text("Export to ZIP")
+                        .font(.title2.bold())
+                        .foregroundColor(.white)
+                    Text("\(items.count) item\(items.count == 1 ? "" : "s") will be encrypted into a password-protected ZIP archive.")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+
+                // Password fields
+                VStack(spacing: 12) {
+                    SecureField("Password", text: $password)
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal)
+
+                    SecureField("Confirm Password", text: $confirmPassword)
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal)
+                }
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(.horizontal)
+                }
+
+                // Export button
+                Button {
+                    exportZip()
+                } label: {
+                    HStack {
+                        if isExporting {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "lock.fill")
+                        }
+                        Text(isExporting ? "Creating ZIP..." : "Create & Share ZIP")
+                            .font(.headline)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Capsule().fill(Color.purple))
+                    .foregroundColor(.white)
+                }
+                .padding(.horizontal)
+                .disabled(isExporting || password.isEmpty || confirmPassword.isEmpty)
+
+                Spacer()
+            }
+            .padding(.top, 24)
+            .navigationTitle("Export ZIP")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.gray)
+                }
+            }
+            .preferredColorScheme(.dark)
+        }
+    }
+
+    private func exportZip() {
+        guard password == confirmPassword else {
+            errorMessage = "Passwords do not match."
+            return
+        }
+        guard password.count >= 4 else {
+            errorMessage = "Password must be at least 4 characters."
+            return
+        }
+
+        isExporting = true
+        errorMessage = nil
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let url = try ZipManager.shared.exportToZip(
+                    items: items,
+                    password: password,
+                    storage: storage
+                )
+                DispatchQueue.main.async {
+                    isExporting = false
+                    onExported(url)
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    isExporting = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+}
+
+// MARK: - ZIP Import View
+
+/// Sheet for importing a password-protected ZIP archive.
+struct ZipImportView: View {
+    let storage: VaultStorageManager
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var showFileImporter = false
+    @State private var isImporting = false
+    @State private var errorMessage: String?
+    @State private var successMessage: String?
+    @State private var selectedZipURL: URL?
+    @State private var showPasswordPrompt = false
+    @State private var password = ""
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                // Header
+                VStack(spacing: 8) {
+                    Image(systemName: "archivebox")
+                        .font(.system(size: 48))
+                        .foregroundColor(.blue)
+                    Text("Import from ZIP")
+                        .font(.title2.bold())
+                        .foregroundColor(.white)
+                    Text("Select a password-protected ZIP archive to import its contents into your vault.")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(.horizontal)
+                }
+
+                if let successMessage {
+                    Text(successMessage)
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .padding(.horizontal)
+                }
+
+                // Import button
+                Button {
+                    showFileImporter = true
+                } label: {
+                    HStack {
+                        if isImporting {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "folder.badge.plus")
+                        }
+                        Text(isImporting ? "Importing..." : "Choose ZIP File")
+                            .font(.headline)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Capsule().fill(Color.blue))
+                    .foregroundColor(.white)
+                }
+                .padding(.horizontal)
+                .disabled(isImporting)
+
+                Spacer()
+            }
+            .padding(.top, 24)
+            .navigationTitle("Import ZIP")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.gray)
+                }
+            }
+            .fileImporter(
+                isPresented: $showFileImporter,
+                allowedContentTypes: [.data, .zip, .item],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    guard let url = urls.first else { return }
+                    selectedZipURL = url
+                    password = ""
+                    showPasswordPrompt = true
+                case .failure:
+                    errorMessage = "Could not open the selected file."
+                }
+            }
+            .alert("Enter ZIP Password", isPresented: $showPasswordPrompt) {
+                SecureField("Password", text: $password)
+                Button("Import") {
+                    importZip()
+                }
+                Button("Cancel", role: .cancel) {
+                    password = ""
+                    selectedZipURL = nil
+                }
+            } message: {
+                Text("Enter the password for this ZIP archive.")
+            }
+            .preferredColorScheme(.dark)
+        }
+    }
+
+    private func importZip() {
+        guard let url = selectedZipURL, !password.isEmpty else { return }
+        let pass = password
+
+        isImporting = true
+        errorMessage = nil
+        successMessage = nil
+        password = ""
+        selectedZipURL = nil
+
+        Task {
+            do {
+                let count = try await ZipManager.shared.importFromZip(
+                    url: url,
+                    password: pass,
+                    storage: storage
+                )
+                await MainActor.run {
+                    isImporting = false
+                    successMessage = "Successfully imported \(count) item\(count == 1 ? "" : "s")."
+                }
+            } catch {
+                await MainActor.run {
+                    isImporting = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 }
 

@@ -6,7 +6,6 @@ import UIKit
 
 /// Pluggable cloud storage provider for encrypted backups.
 enum CloudBackupProvider: String, CaseIterable, Identifiable {
-    case googleDrive = "Google Drive"
     case iCloud = "iCloud"
 
     var id: String { rawValue }
@@ -29,8 +28,8 @@ enum BackupStatus: Equatable {
 /// **Architecture:**
 ///  - All vault media is encrypted with AES-GCM (CryptoKit) into a single
 ///    password-protected container file.
-///  - The container is then uploaded to the user's personal Google Drive
-///    (via Drive API) or iCloud (via FileManager/CloudKit).
+///  - The container is then uploaded to the user's iCloud
+///    (via FileManager/CloudKit).
 ///  - Cloud providers only ever see opaque ciphertext — they cannot read
 ///    the contents without the master PIN.
 ///  - Supports Manual ("Back Up Now") and Auto (Wi-Fi + charging) modes.
@@ -270,21 +269,11 @@ final class CloudBackupManager: ObservableObject {
     // MARK: - Upload
 
     private func uploadContainer(_ data: Data) throws {
-        switch selectedProvider {
-        case .iCloud:
-            try uploadToICloud(data)
-        case .googleDrive:
-            try uploadToGoogleDrive(data)
-        }
+        try uploadToICloud(data)
     }
 
     private func downloadContainer() throws -> Data {
-        switch selectedProvider {
-        case .iCloud:
-            return try downloadFromICloud()
-        case .googleDrive:
-            return try downloadFromGoogleDrive()
-        }
+        try downloadFromICloud()
     }
 
     // MARK: - iCloud
@@ -312,92 +301,6 @@ final class CloudBackupManager: ObservableObject {
         return try Data(contentsOf: url)
     }
 
-    // MARK: - Google Drive
-
-    /// OAuth access token for Google Drive API (from GoogleDriveAuthManager).
-    private var googleAccessToken: String? {
-        GoogleDriveAuthManager.shared.accessToken
-    }
-
-    private func uploadToGoogleDrive(_ data: Data) throws {
-        guard let token = googleAccessToken else {
-            throw BackupError.googleDriveNotConfigured
-        }
-
-        let url = URL(string: "https://www.googleapis.com/upload/drive/v3/files?uploadType=media")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        request.httpBody = data
-
-        let semaphore = DispatchSemaphore(value: 0)
-        var uploadError: Error?
-
-        URLSession.shared.dataTask(with: request) { _, _, error in
-            uploadError = error
-            semaphore.signal()
-        }.resume()
-
-        semaphore.wait()
-        if let uploadError {
-            throw uploadError
-        }
-    }
-
-    private func downloadFromGoogleDrive() throws -> Data {
-        guard let token = googleAccessToken else {
-            throw BackupError.googleDriveNotConfigured
-        }
-
-        // First, find the file by name
-        let searchURL = URL(string: "https://www.googleapis.com/drive/v3/files?q=name='\(backupFileName)'")!
-        var request = URLRequest(url: searchURL)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        let semaphore = DispatchSemaphore(value: 0)
-        var fileID: String?
-        var downloadError: Error?
-
-        URLSession.shared.dataTask(with: request) { data, _, error in
-            if let error {
-                downloadError = error
-            } else if let data,
-                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let files = json["files"] as? [[String: Any]],
-                      let first = files.first {
-                fileID = first["id"] as? String
-            }
-            semaphore.signal()
-        }.resume()
-
-        semaphore.wait()
-        if let downloadError {
-            throw downloadError
-        }
-        guard let fileID else {
-            throw BackupError.noBackupFound
-        }
-
-        // Download the file
-        let downloadURL = URL(string: "https://www.googleapis.com/drive/v3/files/\(fileID)?alt=media")!
-        var downloadRequest = URLRequest(url: downloadURL)
-        downloadRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        var resultData: Data?
-        URLSession.shared.dataTask(with: downloadRequest) { data, _, error in
-            if error == nil {
-                resultData = data
-            }
-            semaphore.signal()
-        }.resume()
-
-        semaphore.wait()
-        guard let resultData else {
-            throw BackupError.noBackupFound
-        }
-        return resultData
-    }
 
     // MARK: - Auto Backup
 
@@ -433,7 +336,6 @@ final class CloudBackupManager: ObservableObject {
         case emptyVault
         case invalidContainer
         case iCloudUnavailable
-        case googleDriveNotConfigured
         case noBackupFound
 
         var errorDescription: String? {
@@ -444,8 +346,6 @@ final class CloudBackupManager: ObservableObject {
                 return "Backup file is corrupted."
             case .iCloudUnavailable:
                 return "iCloud is not available. Please sign in to iCloud."
-            case .googleDriveNotConfigured:
-                return "Google Drive is not configured. Please sign in."
             case .noBackupFound:
                 return "No backup found."
             }

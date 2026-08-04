@@ -45,7 +45,9 @@ A fully functional iOS **VPN Status & Network Utility** app that secretly hides 
 - **Panic Mode / Decoy Vault** — alternate PIN opens a clean fake photo vault
 - **Intruder Selfie (Break-in Alert)** — front camera silently captures after 3 failed attempts, stored in hidden Security Log
 - **Emergency Face-Down / Shake Lock** — auto-locks and returns to VPN screen when device is flipped or shaken
-- **Encrypted Cloud Backup** — AES-256 containers for Google Drive / iCloud with Manual + Auto (Wi-Fi + charging) modes
+- **Encrypted Cloud Backup** — AES-256 containers for iCloud with Manual + Auto (Wi-Fi + charging) modes
+- **Password-Protected ZIP Export** — create encrypted `.vpnzip` archives with a password and share them
+- **ZIP Import with Auto-Save** — unzip password-protected archives and optionally auto-save photos to the Photos library
 - **Share Sheet** — decrypted media temporarily cached, native `UIActivityViewController`, cache auto-purged on close
 - **In-App Private Camera** — capture photos/videos directly into the vault (never touches Camera Roll)
 - **Auto-Delete Import** — optionally remove originals from public Photos after encryption
@@ -62,7 +64,8 @@ A fully functional iOS **VPN Status & Network Utility** app that secretly hides 
 | 👤 Biometrics | LocalAuthentication (Face ID / Touch ID) |
 | 📸 Intruder Capture | AVCapturePhotoOutput (silent front-camera) |
 | 📡 Motion Lock | CoreMotion + UIDevice orientation |
-| ☁️ Cloud Backup | AES-256 container → Google Drive / iCloud |
+| ☁️ Cloud Backup | AES-256 container → iCloud |
+| 📦 ZIP Export/Import | Password-protected `.vpnzip` archives with auto-save photos |
 | 🧹 Share Cache | Temp dir auto-purged on share sheet close |
 
 ---
@@ -84,7 +87,7 @@ VpnHide/
 │   │   ├── KeychainManager.swift       # Keychain PIN/key storage
 │   │   ├── SecurityManager.swift       # Intruder selfie + face-down/shake lock + storage disguise
 │   │   ├── CloudBackupManager.swift    # AES-256 cloud backup (manual + auto sync)
-│   │   ├── GoogleDriveAuthManager.swift # Native OAuth 2.0 sign-in for Google Drive
+│   │   ├── ZipManager.swift            # Password-protected ZIP export/import + auto-save photos
 │   │   ├── VaultSessionManager.swift   # PIN, FaceID, panic mode state
 │   │   └── VaultStorageManager.swift   # Encrypted file storage + trash + temp cache
 │   ├── Views/
@@ -136,51 +139,32 @@ open VpnHide.xcodeproj
 
 ---
 
-## ☁️ Google Drive Backup Setup
+## 📦 ZIP Export & Import
 
-The app uses **native OAuth 2.0** (`ASWebAuthenticationSession`) — no external SDK required. To enable Google Drive backups, you must create an OAuth client and paste your Client ID into the app:
+### Export to Password-Protected ZIP
 
-### 1. Create a Google Cloud Project
+1. Open the vault → select items (long-press to enter multi-select mode)
+2. Tap **Export ZIP** in the action bar
+3. Enter a **password** to encrypt the archive
+4. The encrypted `.vpnzip` file is created and the **Share Sheet** opens — share it via AirDrop, Messages, email, etc.
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project (or select an existing one)
-3. Go to **APIs & Services → Library**
-4. Search for **Google Drive API** and click **Enable**
+### Import from ZIP
 
-### 2. Create OAuth Client ID
-
-1. Go to **APIs & Services → Credentials**
-2. Click **+ Create Credentials → OAuth client ID**
-3. Application type: **iOS**
-4. Bundle ID: `com.vpnhide.app`
-5. Click **Create**, then copy the **Client ID** (format: `xxxxx.apps.googleusercontent.com`)
-
-### 3. Add the Client ID to the app
-
-Open `VpnHide/Managers/GoogleDriveAuthManager.swift` and replace the placeholder:
-
-```swift
-private let clientID = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
-```
-
-with your real Client ID.
-
-### 4. Sign In & Back Up
-
-1. Open the vault → **Settings**
-2. Set the **Cloud Provider** to **Google Drive**
-3. Tap **Sign in to Google Drive** → complete the OAuth flow in the browser
-4. Tap **Back Up Now** and enter your Master PIN
+1. Open the vault → tap **Import ZIP**
+2. Select a `.vpnzip` file (via Files app or share sheet)
+3. Enter the **password** used to encrypt the archive
+4. The files are decrypted and imported into your vault
+5. If **Auto-Save Photos After Unzip** is enabled in Settings, photos are also saved to your Photos library
 
 ### How It Works
 
 | Step | Detail |
 |------|--------|
-| 🔐 **Encryption** | Vault media is encrypted with AES-256-GCM using your Master PIN |
-| 📦 **Container** | All encrypted data is packed into a single `vault_backup.vpn` file |
-| ☁️ **Upload** | The container is uploaded to your personal Drive via the Drive API |
-| 🔑 **Token** | OAuth access token is stored securely in the iOS Keychain |
-| 🔒 **Privacy** | Google only sees opaque ciphertext — it **cannot** read your data |
+| 🔐 **Encryption** | ZIP archive is encrypted with AES-256-GCM using your password |
+| 📦 **Format** | Files are packed into a standard ZIP structure, then encrypted with a `VPNZIP` magic header |
+| 🔑 **Password** | Key derived from your password via HKDF-SHA256 |
+| 📸 **Auto-Save** | Photos can be automatically saved to the Photos library after unzipping |
+| 🔒 **Privacy** | Only someone with the password can decrypt and read the archive |
 
 ---
 
