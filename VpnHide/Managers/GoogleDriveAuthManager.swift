@@ -22,7 +22,7 @@ final class GoogleDriveAuthManager: NSObject, ObservableObject {
     //  4. Set the bundle identifier to: com.vpnhide.app
     //  5. Copy the Client ID here (format: xxxxx.apps.googleusercontent.com)
     //
-    private let clientID = "921038203170-jqr5fnv02b9c35a5hb6let64k0hulkgn.apps.googleusercontent.com"
+    private let clientID = "921038203170-rmttqc46ugrljt7tgvsps4p6kifhqb17.apps.googleusercontent.com"
 
     /// Must match the `CFBundleURLSchemes` entry in project.yml
     /// (the app's bundle ID is used as the deep-link scheme).
