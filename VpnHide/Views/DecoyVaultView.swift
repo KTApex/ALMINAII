@@ -125,10 +125,10 @@ struct DecoyVaultView: View {
                             let renamedURL = tempURL.appendingPathExtension(ext)
                             try? FileManager.default.moveItem(at: tempURL, to: renamedURL)
 
-                            try storage.importMedia(from: renamedURL, isDecoy: true)
+                            try await storage.importMedia(from: renamedURL, isDecoy: true)
                             try? FileManager.default.removeItem(at: renamedURL)
                         } else {
-                            try storage.importMedia(from: tempURL, isDecoy: true)
+                            try await storage.importMedia(from: tempURL, isDecoy: true)
                             try? FileManager.default.removeItem(at: tempURL)
                         }
                     }

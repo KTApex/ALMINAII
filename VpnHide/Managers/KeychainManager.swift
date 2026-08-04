@@ -17,7 +17,7 @@ final class KeychainManager {
     @discardableResult
     func saveKey(_ data: Data, named name: String) throws -> Bool {
         // Delete any existing item first to avoid duplicate-key errors
-        try? deleteKey(named: name)
+        _ = try? deleteKey(named: name)
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,

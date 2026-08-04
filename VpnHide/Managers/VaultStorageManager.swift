@@ -179,7 +179,7 @@ final class VaultStorageManager: ObservableObject {
     // MARK: - Import Media
 
     /// Imports a photo/video from the Photos library, encrypts it, and stores it in the vault.
-    func importMedia(from url: URL, isDecoy: Bool = false) throws {
+    func importMedia(from url: URL, isDecoy: Bool = false) async throws {
         let data = try Data(contentsOf: url)
         let encryptedData = try crypto.encrypt(data)
 
@@ -187,11 +187,11 @@ final class VaultStorageManager: ObservableObject {
         let ext = (originalName as NSString).pathExtension.lowercased()
         let mediaType: VaultMediaType = (ext == "mp4" || ext == "mov" || ext == "m4v") ? .video : .photo
 
-        // Get video duration if it's a video
+        // Get video duration if it's a video (using the modern async API)
         var duration: Double = 0
         if mediaType == .video {
             let asset = AVURLAsset(url: url)
-            duration = CMTimeGetSeconds(asset.duration)
+            duration = try await asset.load(.duration).seconds
         }
 
         let encryptedFileName = "\(UUID().uuidString).enc"

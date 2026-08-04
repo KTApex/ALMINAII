@@ -575,10 +575,10 @@ struct MediaVaultView: View {
                             let renamedURL = tempURL.appendingPathExtension(ext)
                             try? FileManager.default.moveItem(at: tempURL, to: renamedURL)
 
-                            try storage.importMedia(from: renamedURL)
+                            try await storage.importMedia(from: renamedURL)
                             try? FileManager.default.removeItem(at: renamedURL)
                         } else {
-                            try storage.importMedia(from: tempURL)
+                            try await storage.importMedia(from: tempURL)
                             try? FileManager.default.removeItem(at: tempURL)
                         }
                     }

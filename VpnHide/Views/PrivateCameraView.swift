@@ -326,32 +326,36 @@ struct PrivateCameraView: View {
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("jpg")
 
-        do {
-            try jpgData.write(to: tempURL)
-            try storage.importMedia(from: tempURL)
-            try? FileManager.default.removeItem(at: tempURL)
-        } catch {
-            // Silent failure
-        }
+        Task {
+            do {
+                try jpgData.write(to: tempURL)
+                try await storage.importMedia(from: tempURL)
+                try? FileManager.default.removeItem(at: tempURL)
+            } catch {
+                // Silent failure
+            }
 
-        isShowingPreview = false
-        self.capturedPreview = nil
-        dismiss()
+            isShowingPreview = false
+            self.capturedPreview = nil
+            dismiss()
+        }
     }
 
     private func saveCapturedVideo() {
         guard let capturedVideoURL else { return }
 
-        do {
-            try storage.importMedia(from: capturedVideoURL)
-            try? FileManager.default.removeItem(at: capturedVideoURL)
-        } catch {
-            // Silent failure
-        }
+        Task {
+            do {
+                try await storage.importMedia(from: capturedVideoURL)
+                try? FileManager.default.removeItem(at: capturedVideoURL)
+            } catch {
+                // Silent failure
+            }
 
-        isShowingPreview = false
-        self.capturedVideoURL = nil
-        dismiss()
+            isShowingPreview = false
+            self.capturedVideoURL = nil
+            dismiss()
+        }
     }
 }
 

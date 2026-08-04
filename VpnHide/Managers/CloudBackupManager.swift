@@ -197,9 +197,9 @@ final class CloudBackupManager: ObservableObject {
         if let combined = sealedBox.combined {
             container.append(combined)
         } else {
-            container.append(sealedBox.nonce)
-            container.append(sealedBox.ciphertext)
-            container.append(sealedBox.tag)
+            container.append(contentsOf: sealedBox.nonce)
+            container.append(contentsOf: sealedBox.ciphertext)
+            container.append(contentsOf: sealedBox.tag)
         }
 
         return container
