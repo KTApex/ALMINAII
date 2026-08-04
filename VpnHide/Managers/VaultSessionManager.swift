@@ -126,9 +126,13 @@ final class VaultSessionManager: ObservableObject {
         }
 
         guard verifyPIN(pin) else {
+            // Register the failed attempt → triggers intruder selfie at 3 failures
+            SecurityManager.shared.registerFailedAttempt()
             return false
         }
 
+        // Success — reset failure counter
+        SecurityManager.shared.resetFailedAttempts()
         isVaultUnlocked = true
         isDecoyMode = false
         isShowingPasscode = false
@@ -137,6 +141,7 @@ final class VaultSessionManager: ObservableObject {
 
     /// Unlocks the vault after successful biometric auth.
     func unlockWithBiometrics() {
+        SecurityManager.shared.resetFailedAttempts()
         isVaultUnlocked = true
         isDecoyMode = false
         isShowingPasscode = false

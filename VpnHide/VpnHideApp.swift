@@ -17,6 +17,7 @@ struct VpnHideApp: App {
 
 struct RootView: View {
     @EnvironmentObject var session: VaultSessionManager
+    @StateObject private var security = SecurityManager.shared
 
     var body: some View {
         Group {
@@ -33,5 +34,27 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.3), value: session.isVaultUnlocked)
         .animation(.easeInOut(duration: 0.3), value: session.isDecoyMode)
+        .onAppear {
+            // Wire emergency motion lock (face-down / shake) to the session.
+            security.onEmergencyLock = {
+                session.lockVault()
+            }
+            // First launch: show PIN setup if no PIN is configured.
+            if !session.hasPIN {
+                session.requestPasscode(mode: .setup)
+            }
+        }
+        .onChange(of: session.isVaultUnlocked) { unlocked in
+            if unlocked {
+                // Full security monitoring while the vault is open.
+                security.startEmergencyMonitoring()
+            } else {
+                security.stopEmergencyMonitoring()
+            }
+        }
+        .sheet(isPresented: $session.isShowingPasscode) {
+            PasscodeView()
+                .environmentObject(session)
+        }
     }
 }

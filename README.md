@@ -22,8 +22,9 @@ A fully functional iOS **VPN Status & Network Utility** app that secretly hides 
 
 | Feature | Description |
 |---------|-------------|
-| 🛡️ **Realistic VPN UI** | Toggle switch, connection status, and ping test |
+| 🛡️ **Realistic VPN & Network Tools UI** | Functional Speed Test, Ping Test, Wi-Fi Analyzer, and VPN Toggle |
 | 🔑 **Hidden Entry** | Long-press the VPN Shield icon for **3 seconds** to trigger the secret PIN screen |
+| 📩 **Disguised Notifications** | All system alerts appear as routine network alerts ("VPN Connection Optimized", "Wi-Fi Security Scan Complete") — never vault activity |
 | 🕵️ **Stealth Mode** | App looks like a normal VPN utility — nothing suspicious on the surface |
 
 ### 🔒 Secret Vault (Unlocked Mode)
@@ -42,6 +43,14 @@ A fully functional iOS **VPN Status & Network Utility** app that secretly hides 
   - 🎛️ **Control Overlay** — translucent Play/Pause, speed picker, transition switcher, live progress bar
 - **AES-GCM Encryption** (CryptoKit) — files stored in Application Support, NOT the photo library
 - **Panic Mode / Decoy Vault** — alternate PIN opens a clean fake photo vault
+- **Intruder Selfie (Break-in Alert)** — front camera silently captures after 3 failed attempts, stored in hidden Security Log
+- **Emergency Face-Down / Shake Lock** — auto-locks and returns to VPN screen when device is flipped or shaken
+- **Encrypted Cloud Backup** — AES-256 containers for Google Drive / iCloud with Manual + Auto (Wi-Fi + charging) modes
+- **Share Sheet** — decrypted media temporarily cached, native `UIActivityViewController`, cache auto-purged on close
+- **In-App Private Camera** — capture photos/videos directly into the vault (never touches Camera Roll)
+- **Auto-Delete Import** — optionally remove originals from public Photos after encryption
+- **Trash / Recycle Bin** — 30-day retention before permanent purge
+- **Obfuscated Storage Reporting** — displays "Network Cache: ~14 MB" instead of real vault size
 
 ### 🔐 Security Architecture
 
@@ -51,6 +60,10 @@ A fully functional iOS **VPN Status & Network Utility** app that secretly hides 
 | 🔑 PIN Storage | Keychain Services (salted SHA-256 hash) |
 | 💾 Media Storage | Application Support directory (encrypted) |
 | 👤 Biometrics | LocalAuthentication (Face ID / Touch ID) |
+| 📸 Intruder Capture | AVCapturePhotoOutput (silent front-camera) |
+| 📡 Motion Lock | CoreMotion + UIDevice orientation |
+| ☁️ Cloud Backup | AES-256 container → Google Drive / iCloud |
+| 🧹 Share Cache | Temp dir auto-purged on share sheet close |
 
 ---
 
@@ -69,17 +82,23 @@ VpnHide/
 │   ├── Managers/
 │   │   ├── CryptoManager.swift         # AES-GCM encryption/decryption
 │   │   ├── KeychainManager.swift       # Keychain PIN/key storage
+│   │   ├── SecurityManager.swift       # Intruder selfie + face-down/shake lock + storage disguise
+│   │   ├── CloudBackupManager.swift    # AES-256 cloud backup (manual + auto sync)
 │   │   ├── VaultSessionManager.swift   # PIN, FaceID, panic mode state
-│   │   └── VaultStorageManager.swift   # Encrypted file storage
+│   │   └── VaultStorageManager.swift   # Encrypted file storage + trash + temp cache
 │   ├── Views/
-│   │   ├── VPNFrontView.swift          # VPN mask UI + secret trigger
-│   │   ├── PasscodeView.swift          # PIN entry + FaceID
-│   │   ├── MediaVaultView.swift        # Date-grouped grid + albums + sort/filter + slideshow
+│   │   ├── VPNFrontView.swift          # VPN mask UI + speed/ping/wi-fi tools + secret trigger
+│   │   ├── PasscodeView.swift          # PIN entry + FaceID + intruder lockout
+│   │   ├── MediaVaultView.swift        # Date-grouped grid + albums + share + camera + trash
 │   │   ├── MediaViewerView.swift       # Full-screen single media viewer (zoom + video)
 │   │   ├── SlideshowView.swift         # Customizable auto-slideshow (speed, transitions, video sync)
+│   │   ├── PrivateCameraView.swift     # In-app camera (photos + videos)
+│   │   ├── TrashView.swift             # 30-day recycle bin
+│   │   ├── VaultSettingsView.swift     # Panic PIN, biometrics, backup, security log
 │   │   ├── DecoyVaultView.swift        # Fake/panic vault
 │   │   └── Components/
-│   │       └── MediaThumbnailView.swift # Thumbnail cell
+│   │       ├── MediaThumbnailView.swift # Thumbnail cell
+│   │       └── ShareSheet.swift         # UIActivityViewController bridge + temp cache purge
 │   └── Assets.xcassets/                # App icon + accent color
 ```
 

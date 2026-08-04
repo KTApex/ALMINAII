@@ -37,6 +37,9 @@ struct VaultItem: Identifiable, Codable, Hashable {
     var duration: Double
     var isDecoy: Bool = false
     var albumID: UUID?
+    // MARK: - Trash Support
+    /// Set when the item is moved to the trash (30-day retention).
+    var deletedAt: Date?
 
     init(
         id: UUID = UUID(),
@@ -47,7 +50,8 @@ struct VaultItem: Identifiable, Codable, Hashable {
         fileSize: Int64,
         duration: Double = 0,
         isDecoy: Bool = false,
-        albumID: UUID? = nil
+        albumID: UUID? = nil,
+        deletedAt: Date? = nil
     ) {
         self.id = id
         self.fileName = fileName
@@ -58,6 +62,12 @@ struct VaultItem: Identifiable, Codable, Hashable {
         self.duration = duration
         self.isDecoy = isDecoy
         self.albumID = albumID
+        self.deletedAt = deletedAt
+    }
+
+    /// True when the item is in the trash (deletedAt is non-nil).
+    var isTrashed: Bool {
+        deletedAt != nil
     }
 
     var displayName: String {

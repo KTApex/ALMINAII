@@ -25,6 +25,17 @@ struct MediaVaultView: View {
     @State private var isImporting = false
     @State private var importError: String?
 
+    // New features
+    @State private var showShareSheet = false
+    @State private var shareURLs: [URL] = []
+    @State private var showPrivateCamera = false
+    @State private var showTrash = false
+    @State private var showSettings = false
+    @State private var showAutoDeleteToggle = false
+    @State private var autoDeleteOriginals = false
+    @State private var showShareError = false
+    @State private var shareErrorMessage = ""
+
     // Filter / Sort / Album state
     @State private var sortOption: VaultSortOption = .dateAdded
     @State private var filterOption: VaultFilterOption = .all
@@ -133,7 +144,7 @@ struct MediaVaultView: View {
                     }
                 }
 
-                // Filter / Sort button
+                // Toolbar
                 ToolbarItem(placement: .topBarTrailing) {
                     if isMultiSelectMode {
                         Button("Cancel") {
@@ -168,6 +179,33 @@ struct MediaVaultView: View {
                         }
                     }
                 }
+
+                // Bottom toolbar: Camera, Trash, Settings
+                ToolbarItemGroup(placement: .bottomBar) {
+                    if !isMultiSelectMode {
+                        Button {
+                            showPrivateCamera = true
+                        } label: {
+                            Label("Camera", systemImage: "camera.fill")
+                        }
+
+                        Spacer()
+
+                        Button {
+                            showTrash = true
+                        } label: {
+                            Label("Trash", systemImage: "trash.fill")
+                        }
+
+                        Spacer()
+
+                        Button {
+                            showSettings = true
+                        } label: {
+                            Label("Settings", systemImage: "gearshape.fill")
+                        }
+                    }
+                }
             }
             .safeAreaInset(edge: .bottom) {
                 if isMultiSelectMode {
@@ -185,6 +223,37 @@ struct MediaVaultView: View {
             }
             .fullScreenCover(isPresented: $showSlideshow) {
                 SlideshowView(items: slideshowItems, storage: storage)
+            }
+            .fullScreenCover(isPresented: $showPrivateCamera) {
+                PrivateCameraView(storage: storage)
+            }
+            .sheet(isPresented: $showTrash) {
+                TrashView(storage: storage)
+            }
+            .sheet(isPresented: $showSettings) {
+                VaultSettingsView()
+                    .environmentObject(session)
+            }
+            .sheet(isPresented: $showShareSheet) {
+                ShareSheet(items: shareURLs) {
+                    showShareSheet = false
+                    shareURLs = []
+                }
+            }
+            .alert("Share Error", isPresented: $showShareError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Failed to decrypt one or more items for sharing.")
+            }
+            .alert("Auto-Delete Originals", isPresented: $showAutoDeleteToggle) {
+                Button("Enable", role: .destructive) {
+                    autoDeleteOriginals = true
+                }
+                Button("Disable", role: .cancel) {
+                    autoDeleteOriginals = false
+                }
+            } message: {
+                Text("Remove original media from the Photos library after successful encryption?")
             }
             .fullScreenCover(item: $viewerItem) { item in
                 MediaViewerView(item: item, storage: storage)
@@ -385,6 +454,18 @@ struct MediaVaultView: View {
             }
             .disabled(selectedItems.isEmpty)
 
+            // Share button
+            Button {
+                shareSelectedItems()
+            } label: {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(Color.green))
+            }
+            .disabled(selectedItems.isEmpty)
+
             // Move to album
             Button {
                 showMoveToAlbum = true
@@ -397,7 +478,7 @@ struct MediaVaultView: View {
             }
             .disabled(selectedItems.isEmpty)
 
-            // Delete
+            // Delete (moves to trash)
             Button {
                 showDeleteConfirmation = true
             } label: {
@@ -511,11 +592,25 @@ struct MediaVaultView: View {
         }
     }
 
-    // MARK: - Delete
+    // MARK: - Share
+
+    private func shareSelectedItems() {
+        let itemsToShare = storage.vaultItems.filter { selectedItems.contains($0.id) }
+
+        guard let urls = ShareHelper.prepareShareURLs(for: itemsToShare, storage: storage) else {
+            showShareError = true
+            return
+        }
+
+        shareURLs = urls
+        showShareSheet = true
+    }
+
+    // MARK: - Delete (moves to trash)
 
     private func deleteSelectedItems() {
         let itemsToDelete = storage.vaultItems.filter { selectedItems.contains($0.id) }
-        storage.deleteItems(itemsToDelete)
+        storage.moveToTrash(itemsToDelete)
         exitMultiSelectMode()
     }
 }

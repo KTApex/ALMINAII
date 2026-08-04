@@ -16,6 +16,11 @@ final class VaultStorageManager: ObservableObject {
     @Published var vaultItems: [VaultItem] = []
     @Published var decoyItems: [VaultItem] = []
     @Published var albums: [VaultAlbum] = []
+    @Published var trashedItems: [VaultItem] = []
+    @Published var decoyTrashedItems: [VaultItem] = []
+
+    /// 30-day retention period for the recycle bin.
+    let trashRetentionDays = 30
 
     // MARK: - Private
 
@@ -43,7 +48,7 @@ final class VaultStorageManager: ObservableObject {
     }
 
     /// Directory for encrypted vault media.
-    private var vaultMediaDir: URL {
+    func encryptedMediaDir() -> URL {
         let dir = vaultAppSupportDir.appendingPathComponent("Media", isDirectory: true)
         if !fileManager.fileExists(atPath: dir.path) {
             try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -51,9 +56,23 @@ final class VaultStorageManager: ObservableObject {
         return dir
     }
 
+    /// Backwards-compatible alias for `encryptedMediaDir()`.
+    private var vaultMediaDir: URL {
+        encryptedMediaDir()
+    }
+
     /// Directory for decoy (fake) vault media.
     private var decoyMediaDir: URL {
         let dir = vaultAppSupportDir.appendingPathComponent("Decoy", isDirectory: true)
+        if !fileManager.fileExists(atPath: dir.path) {
+            try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        return dir
+    }
+
+    /// Directory for trashed vault media.
+    private var trashMediaDir: URL {
+        let dir = vaultAppSupportDir.appendingPathComponent("Trash", isDirectory: true)
         if !fileManager.fileExists(atPath: dir.path) {
             try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         }
@@ -77,6 +96,11 @@ final class VaultStorageManager: ObservableObject {
     private func loadMetadata() {
         vaultItems = loadItems(from: metadataFileURL)
         decoyItems = loadItems(from: decoyMetadataFileURL)
+
+        // Load trashed items and purge any past 30 days
+        let allItems = vaultItems + decoyItems
+        trashedItems = allItems.filter { $0.isTrashed }
+        purgeExpiredTrash()
     }
 
     // MARK: - Album Management
@@ -140,7 +164,7 @@ final class VaultStorageManager: ObservableObject {
         return (try? decoder.decode([VaultItem].self, from: data)) ?? []
     }
 
-    private func saveMetadata() {
+    func saveMetadata() {
         saveItems(vaultItems, to: metadataFileURL)
         saveItems(decoyItems, to: decoyMetadataFileURL)
     }
@@ -173,7 +197,6 @@ final class VaultStorageManager: ObservableObject {
         let encryptedFileName = "\(UUID().uuidString).enc"
         let targetDir = isDecoy ? decoyMediaDir : vaultMediaDir
         let targetURL = targetDir.appendingPathComponent(encryptedFileName)
-
         try encryptedData.write(to: targetURL, options: .atomic)
 
         let item = VaultItem(
@@ -195,10 +218,15 @@ final class VaultStorageManager: ObservableObject {
 
     // MARK: - Read / Decrypt
 
+    /// Returns the encrypted file URL for a vault item.
+    func encryptedFileURL(for item: VaultItem) -> URL {
+        let dir = item.isDecoy ? decoyMediaDir : vaultMediaDir
+        return dir.appendingPathComponent(item.encryptedFileName)
+    }
+
     /// Decrypts a vault item and returns the raw media data.
     func decryptItem(_ item: VaultItem) -> Data? {
-        let dir = item.isDecoy ? decoyMediaDir : vaultMediaDir
-        let url = dir.appendingPathComponent(item.encryptedFileName)
+        let url = encryptedFileURL(for: item)
         guard let encryptedData = try? Data(contentsOf: url) else { return nil }
         return try? crypto.decrypt(encryptedData)
     }
@@ -220,12 +248,102 @@ final class VaultStorageManager: ObservableObject {
         return UIImage(data: data)
     }
 
-    // MARK: - Delete
+    // MARK: - Trash / Recycle Bin
+
+    /// Moves items to the trash. They remain recoverable for 30 days.
+    func moveToTrash(_ items: [VaultItem]) {
+        let now = Date()
+
+        for item in items {
+            if let index = vaultItems.firstIndex(where: { $0.id == item.id }) {
+                vaultItems[index].deletedAt = now
+            }
+            if let index = decoyItems.firstIndex(where: { $0.id == item.id }) {
+                decoyItems[index].deletedAt = now
+            }
+        }
+
+        // Move the physical files to the trash directory
+        for item in items {
+            let sourceURL = encryptedFileURL(for: item)
+            let trashURL = trashMediaDir.appendingPathComponent(item.encryptedFileName)
+            if fileManager.fileExists(atPath: sourceURL.path) {
+                try? fileManager.moveItem(at: sourceURL, to: trashURL)
+            }
+        }
+
+        refreshTrash()
+        saveMetadata()
+    }
+
+    /// Restores items from the trash back to the main vault.
+    func restoreFromTrash(_ items: [VaultItem]) {
+        for item in items {
+            let trashURL = trashMediaDir.appendingPathComponent(item.encryptedFileName)
+            let destDir = item.isDecoy ? decoyMediaDir : vaultMediaDir
+            let destURL = destDir.appendingPathComponent(item.encryptedFileName)
+
+            if fileManager.fileExists(atPath: trashURL.path) {
+                try? fileManager.moveItem(at: trashURL, to: destURL)
+            }
+
+            if let index = vaultItems.firstIndex(where: { $0.id == item.id }) {
+                vaultItems[index].deletedAt = nil
+            }
+            if let index = decoyItems.firstIndex(where: { $0.id == item.id }) {
+                decoyItems[index].deletedAt = nil
+            }
+        }
+
+        refreshTrash()
+        saveMetadata()
+    }
+
+    /// Permanently deletes items from the trash.
+    func permanentlyDelete(_ items: [VaultItem]) {
+        for item in items {
+            let trashURL = trashMediaDir.appendingPathComponent(item.encryptedFileName)
+            try? fileManager.removeItem(at: trashURL)
+
+            vaultItems.removeAll { $0.id == item.id }
+            decoyItems.removeAll { $0.id == item.id }
+        }
+
+        refreshTrash()
+        saveMetadata()
+    }
+
+    /// Empties the entire trash immediately.
+    func emptyTrash() {
+        try? fileManager.removeItem(at: trashMediaDir)
+
+        vaultItems.removeAll { $0.isTrashed }
+        decoyItems.removeAll { $0.isTrashed }
+
+        refreshTrash()
+        saveMetadata()
+    }
+
+    /// Purges items that have been in the trash for more than 30 days.
+    func purgeExpiredTrash() {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -trashRetentionDays, to: Date()) ?? Date()
+        let expired = trashedItems.filter { ($0.deletedAt ?? Date()) < cutoff }
+
+        guard !expired.isEmpty else { return }
+        permanentlyDelete(expired)
+    }
+
+    private func refreshTrash() {
+        let allItems = vaultItems + decoyItems
+        trashedItems = allItems.filter { $0.isTrashed }
+        decoyTrashedItems = trashedItems.filter { $0.isDecoy }
+    }
+
+    // MARK: - Delete (Direct - bypasses trash)
 
     func deleteItems(_ items: [VaultItem]) {
         for item in items {
-            let dir = item.isDecoy ? decoyMediaDir : vaultMediaDir
-            let url = dir.appendingPathComponent(item.encryptedFileName)
+            let url = encryptedFileURL(for: item)
             try? fileManager.removeItem(at: url)
 
             if item.isDecoy {
@@ -234,6 +352,7 @@ final class VaultStorageManager: ObservableObject {
                 vaultItems.removeAll { $0.id == item.id }
             }
         }
+        refreshTrash()
         saveMetadata()
     }
 
@@ -242,8 +361,33 @@ final class VaultStorageManager: ObservableObject {
     func clearVault() {
         try? fileManager.removeItem(at: vaultMediaDir)
         try? fileManager.removeItem(at: decoyMediaDir)
+        try? fileManager.removeItem(at: trashMediaDir)
         vaultItems = []
         decoyItems = []
+        trashedItems = []
+        decoyTrashedItems = []
         saveMetadata()
+    }
+
+    // MARK: - Storage
+
+    /// Returns the REAL encrypted storage size (used by backup logic only).
+    func actualStorageBytes() -> Int64 {
+        let dirs = [vaultMediaDir, decoyMediaDir, trashMediaDir]
+        var total: Int64 = 0
+
+        for dir in dirs {
+            guard let files = try? fileManager.contentsOfDirectory(
+                at: dir,
+                includingPropertiesForKeys: [.fileSizeKey],
+                options: [.skipsHiddenFiles]
+            ) else { continue }
+
+            total += files.reduce(Int64(0)) { partial, url in
+                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+                return partial + Int64(size)
+            }
+        }
+        return total
     }
 }

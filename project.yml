@@ -26,6 +26,8 @@ targets:
         NSFaceIDUsageDescription: "VPN Shield uses Face ID to securely unlock your private vault."
         NSPhotoLibraryUsageDescription: "VPN Shield needs access to your photo library to securely import and encrypt your private photos and videos."
         NSPhotoLibraryAddUsageDescription: "VPN Shield needs permission to add encrypted media to your private vault."
+        NSCameraUsageDescription: "VPN Shield uses the camera for network diagnostics and secure vault features."
+        NSMotionUsageDescription: "VPN Shield uses motion sensors to optimize network performance."
         UIApplicationSupportsIndirectInputEvents: true
         ITSAppUsesNonExemptEncryption: false
     settings:

@@ -14,6 +14,11 @@ struct PasscodeView: View {
     @State private var isAuthenticating = false
     @State private var shakeTrigger = false
 
+    @ObservedObject private var security = SecurityManager.shared
+    @State private var remainingLockout: Int = 0
+    @State private var lockoutTimer: Timer?
+    @State private var isLockedOut = false
+
     private let pinLength = 4
 
     var body: some View {
@@ -53,6 +58,20 @@ struct PasscodeView: View {
                         .transition(.opacity)
                 }
 
+                // Failed attempts + lockout indicator (disguised as network security message)
+                if isLockedOut {
+                    Text("Network security check in progress.\nPlease wait \(remainingLockout)s…")
+                        .font(.footnote)
+                        .foregroundColor(.orange)
+                        .multilineTextAlignment(.center)
+                        .transition(.opacity)
+                } else if security.failedAttempts > 0 && session.passcodeMode == .unlock {
+                    Text("Wi-Fi handshake secured: \(security.failedAttempts)/3")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                        .transition(.opacity)
+                }
+
                 // Biometric button
                 if session.passcodeMode == .unlock && session.isBiometricEnabled {
                     Button {
@@ -83,6 +102,15 @@ struct PasscodeView: View {
                     showWithBiometrics()
                 }
             }
+
+            // Check for existing lockout state
+            if security.isLockedOut {
+                startLockoutCountdown(duration: security.lockoutSecondsRemaining())
+            }
+        }
+        .onDisappear {
+            lockoutTimer?.invalidate()
+            lockoutTimer = nil
         }
     }
 
@@ -238,10 +266,26 @@ struct PasscodeView: View {
             }
 
         case .unlock:
-            if session.unlockWithPIN(pin) {
+            if security.isLockedOut {
+                errorMessage = "Network verification pending. Try again shortly."
+                resetPIN()
+                return
+            }
+
+            let success = session.unlockWithPIN(pin)
+
+            if success {
+                security.resetFailedAttempts()
                 dismiss()
             } else {
-                errorMessage = "Incorrect PIN. Try again."
+                errorMessage = security.failedAttempts >= 3
+                    ? "Network timeout. Please retry."
+                    : "Incorrect PIN. Try again."
+
+                // If intruder selfie was triggered (3 failures), start lockout
+                if security.isLockedOut {
+                    startLockoutCountdown(duration: security.lockoutSecondsRemaining())
+                }
                 resetPIN()
             }
 
@@ -274,6 +318,24 @@ struct PasscodeView: View {
             if success {
                 session.unlockWithBiometrics()
                 dismiss()
+            }
+        }
+    }
+
+    // MARK: - Lockout
+
+    private func startLockoutCountdown(duration seconds: Int) {
+        isLockedOut = true
+        remainingLockout = seconds
+
+        lockoutTimer?.invalidate()
+        lockoutTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { timer in
+            if remainingLockout > 0 {
+                remainingLockout -= 1
+            } else {
+                timer.invalidate()
+                isLockedOut = false
+                security.endLockout()
             }
         }
     }
